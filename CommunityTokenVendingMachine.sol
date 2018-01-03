@@ -1,4 +1,4 @@
-pragma solidity ^0.4.18;
+pragma solidity ^0.4.19;
 import "./EtherealFoundationOwned.sol";
 contract ERC20Basic {
   function allowance(address _owner, address _spender) constant public returns (uint256 remaining);
@@ -19,25 +19,13 @@ contract CommunityTokenVendingMachine is EtherealFoundationOwned{
 	function balanceOf(address addr) public view returns(uint256){
 		return Balances[addr];
 	}
-		
-	event ExternalTokenAuthorized(address tokenAddress);
-	function AddAuthorizedExternalToken(address tokenAddress, uint256 exchangeRate) public onlyOwner {
-		AuthorizedExternalTokens[tokenAddress] = true;
-	}
-	event ExternalTokenAuthorizationRemoved(address tokenAddress);
-	function RemoveAuthorizedExternalToken(address tokenAddress) public onlyOwner{
-		delete(AuthorizedExternalTokens[tokenAddress]);
-		delete(ExternalTokenExchangeRates[tokenAddress]);
-	}
 	
-	event GemPackBought(address _to, bytes32 packType, uint256 totalGems, address tokenAddress);
-	function BuyGemPack(address _to, bytes32 packType, uint256 totalGems, address tokenAddress)public onlyOwner{
-		//TODO: fix this...
-		require(AuthorizedExternalTokens[tokenAddress]);
-		ERC20Basic token = ERC20Basic(tokenAddress);
-		//check allowance
-		//transfer
-		require(token.transferFrom( _to, amtToken));
+	event GemPackBought(address _to, bytes32 packType, uint256 totalGems);
+	function BuyGemPack(address _to, bytes32 packType, uint256 totalGems)public onlyOwner{
+		
+		require(Balances[_to] + totalGems > Balances[_to]);
+		
+		Balances[_to] += totalGems;
 		
 		GemPackBought( _to, packType, totalGems);
 	}
@@ -53,12 +41,12 @@ contract CommunityTokenVendingMachine is EtherealFoundationOwned{
 		GameRemoved(gameContract);
 	}
 	
-	event TokensCredited(address gameContract);
+	event TokensCredited(address funder, uint256 amt);
 	function CreditTokens(address funder, uint256 amt) public onlyOwner{
 		require(Balances[funder] + amt > Balances[funder]);
 		
 		Balances[funder] += amt;
-		  
+		TokensCredited(funder, amt);
 	}	
 	
 	event Transfered(address _from, address _to, uint256 communityTokenAmt, uint256 timestamp); 
