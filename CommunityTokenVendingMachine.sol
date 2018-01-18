@@ -1,4 +1,4 @@
-pragma solidity ^0.4.19;
+pragma solidity ^0.4.18;
 import "./EtherealFoundationOwned.sol";
 contract ERC20Basic {
   function allowance(address _owner, address _spender) constant public returns (uint256 remaining);
