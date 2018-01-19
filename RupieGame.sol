@@ -140,6 +140,10 @@ contract RupieGame is EtherealFoundationOwned{
 		_url = url;
 		UrlUpdated(url);
 	}	
+	function UpdateCommunityTokenAddress(address vendingMachineAddress) public onlyOwner{
+	    _vendingMachineContractAddress = vendingMachineAddress;
+	    
+	}
 	function TransferCreator(address newCreator) public onlyOwner {
 		_gameCreator = newCreator;
 		CreatorTransfered(newCreator);
@@ -185,61 +189,59 @@ contract RupieGame is EtherealFoundationOwned{
 	///////////////////////////
 	
 	/////COMMUNITY METHODS/////
-	function CreateTask(string name, string url) public {
+	function CreateTask(string name, string url, address creator) public onlyOwner{
 		
-		//TODO, charge for this
-		
-		Tasks.push(Task(	name, url, msg.sender,0,Statuses.Closed));
+		Tasks.push(Task(name, url, creator,0,Statuses.Closed));
 		TaskCreated(uint16(Tasks.length-1), url);
 	}
-	function CreateFeature(string name, string url, bytes32 featureCategory) public {
+	function CreateFeature(string name, string url, bytes32 featureCategory, address creator) public onlyOwner{
 		
 		//TODO, charge for this
-		Features.push(Feature(name, url, 0,msg.sender,featureCategory,Statuses.Closed));
+		Features.push(Feature(name, url, 0, creator, featureCategory, Statuses.Closed));
 		FeatureCreated(uint16(Features.length-1));
 	}
 	
-	function FundMilestone(uint16 milestoneIndex, uint256 communityTokenAmt) public{
+	function FundMilestone(uint16 milestoneIndex, uint256 communityTokenAmt, address funder) public onlyOwner{
 	    require(Milestones[milestoneIndex].MilestoneStatus == Statuses.Open);
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(msg.sender, this, communityTokenAmt);
+		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(funder, this, communityTokenAmt);
 		
 		//if it gets here, it was OK
-		MilestoneFunds[milestoneIndex][msg.sender] +=  communityTokenAmt;
+		MilestoneFunds[milestoneIndex][funder] +=  communityTokenAmt;
 		Milestones[milestoneIndex].TotalFunds += communityTokenAmt;
-		MilestoneFunded(msg.sender, milestoneIndex, communityTokenAmt);
+		MilestoneFunded(funder, milestoneIndex, communityTokenAmt);
 	}
-	function FundFeature(uint16 featureIndex, uint256 communityTokenAmt) public{
+	function FundFeature(uint16 featureIndex, uint256 communityTokenAmt, address funder) public onlyOwner{
 	    require(Features[featureIndex].FeatureStatus == Statuses.Open);
 	    
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(msg.sender, this, communityTokenAmt);
+		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(funder, this, communityTokenAmt);
 		
 		//if it gets here, we are good
-		FeatureFunds[featureIndex][msg.sender] +=  communityTokenAmt;
+		FeatureFunds[featureIndex][funder] +=  communityTokenAmt;
 		Features[featureIndex].TotalFunds += communityTokenAmt;
 		
-		FeatureFunded(msg.sender, featureIndex, communityTokenAmt);
+		FeatureFunded(funder, featureIndex, communityTokenAmt);
 	}
-	function RemoveFundsFromMilestone(uint16 milestoneIndex) public{
+	function RemoveFundsFromMilestone(uint16 milestoneIndex, address funder) public onlyOwner{
 		//must be rejected and have a balance
-		require(Milestones[milestoneIndex].MilestoneStatus == Statuses.Rejected && MilestoneFunds[milestoneIndex][msg.sender] > 0);
+		require(Milestones[milestoneIndex].MilestoneStatus == Statuses.Rejected && MilestoneFunds[milestoneIndex][funder] > 0);
 		
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, msg.sender, MilestoneFunds[milestoneIndex][msg.sender]);
-		Milestones[milestoneIndex].TotalFunds -= MilestoneFunds[milestoneIndex][msg.sender];
+		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, funder, MilestoneFunds[milestoneIndex][funder]);
+		Milestones[milestoneIndex].TotalFunds -= MilestoneFunds[milestoneIndex][funder];
 		
-		MilestoneRefunded(msg.sender, milestoneIndex, MilestoneFunds[milestoneIndex][msg.sender]);
-		MilestoneFunds[milestoneIndex][msg.sender] = 0;
+		MilestoneRefunded(funder, milestoneIndex, MilestoneFunds[milestoneIndex][funder]);
+		MilestoneFunds[milestoneIndex][funder] = 0;
 		
 		
 	}
-	function RemoveFundsFromFeature(uint16 featureIndex)public{
+	function RemoveFundsFromFeature(uint16 featureIndex, address funder)public  onlyOwner{
 		//must be rejected
-		require(Features[featureIndex].FeatureStatus == Statuses.Rejected && FeatureFunds[featureIndex][msg.sender] > 0);
-		uint256 toRefund = FeatureFunds[featureIndex][msg.sender];
+		require(Features[featureIndex].FeatureStatus == Statuses.Rejected && FeatureFunds[featureIndex][funder] > 0);
+		uint256 toRefund = FeatureFunds[featureIndex][funder];
 	
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, msg.sender, toRefund);
+		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, funder, toRefund);
 		Features[featureIndex].TotalFunds -=  toRefund;
-		FeatureRefunded(msg.sender, featureIndex,  toRefund);
-		FeatureFunds[featureIndex][msg.sender] = 0;
+		FeatureRefunded(funder, featureIndex,  toRefund);
+		FeatureFunds[featureIndex][funder] = 0;
 	}	
 	///////////////////////////
 	
