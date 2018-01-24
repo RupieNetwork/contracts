@@ -1,8 +1,31 @@
 pragma solidity ^0.4.18;
-import "./EtherealFoundationOwned.sol";
-//import "./EtherealMine.sol";
 
-contract Rupie is EtherealFoundationOwned {
+
+contract OwnedContract {
+	address private Owner;    
+	function IsOwner(address addr) view public returns(bool)
+	{
+	    return Owner == addr;
+	}	
+	function TransferOwner(address newOwner) public onlyOwner
+	{
+	    Owner = newOwner;
+	}	
+	function OwnedContract() public
+	{
+	    Owner = msg.sender;
+	}	
+	function Terminate() public onlyOwner
+	{
+	    selfdestruct(Owner);
+	}	
+	modifier onlyOwner(){
+        require(msg.sender == Owner);
+        _;
+    }
+}
+
+contract RPI is OwnedContract {
     
     string public constant name = "Rupie";
     string public constant symbol = "RPI";
@@ -49,44 +72,23 @@ contract Rupie is EtherealFoundationOwned {
 	
 	
 	
-    function Rupie(
-		uint256 initialTotalSupply, 
-		address[] addresses, 
-		uint256[] initialBalances, 
-		bool initialBalancesLocked
+    function RPI(
+		uint256 initialTotalSupply
 		) public
     {
-        require(addresses.length == initialBalances.length);
-        
-        currentSupply = initialTotalSupply * (10**decimals);
-        uint256 totalCreated;
-        for(uint8 i =0; i < addresses.length; i++)
-        {
-            if(initialBalancesLocked){
-                lockedAccounts[addresses[i]] = true;
-            }
-            balances[addresses[i]] = initialBalances[i]* (10**decimals);
-            totalCreated += initialBalances[i]* (10**decimals);
-        }
-        
-        
-        if(currentSupply < totalCreated)
-        {
-            selfdestruct(msg.sender);
-        }
-        else
-        {
-            balances[this] = currentSupply - totalCreated;
-        }
+  
+        uint256 toCreate = initialTotalSupply * (10**decimals);
+		balances[this] = toCreate;
+		currentSupply = toCreate;
     }
     
 	
-    event SoldToken(address _buyer, uint256 _value, string note);
-    function BuyToken(address _buyer, uint256 _value, string note) public onlyOwner
+    event SoldToken(address _buyer, uint256 _value);
+    function BuyToken(address _buyer, uint256 _value) public onlyOwner
     {
 		require(balances[this] >= _value && balances[_buyer] + _value > balances[_buyer]);
 		
-        SoldToken( _buyer,  _value,  note);
+        SoldToken( _buyer,  _value);
         balances[this] -= _value;
         balances[_buyer] += _value;
         Transfer(this, _buyer, _value);
