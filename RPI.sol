@@ -67,7 +67,7 @@ contract RPI is OwnedContract {
 		
 	}	
 	/*
-		End Incomming Ether
+		End Incoming Ether
 	*/
 	
 	
