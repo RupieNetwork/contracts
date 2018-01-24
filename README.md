@@ -1,1 +1,6 @@
 
+Ropsten RPI:
+0x65131c6018eaa5baee78a6aa418afbbba7fa0405
+
+Ropsten RupieGame Test Game:
+0x27aa9319f9a4ec5c073d1336a8a3f92e61105781
