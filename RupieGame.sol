@@ -38,7 +38,6 @@ contract RupieGame is OwnedContract{
 	address private _gameCreator;	
 	address private _rpiContractAddress;
 	
-	bytes32[] private _milestoneIds;
 	bytes32 private _currentMilestoneId;
 	mapping(bytes32=>bool) private _milestoneComplete;
 	
@@ -57,6 +56,10 @@ contract RupieGame is OwnedContract{
 		_currentMilestoneId = initialMilestoneId;
 	}
 	
+	function about() public view returns(
+	string name, string url, address gameCreator, address rpiContractAddress, bytes32 currentMilestoneId, uint256 gemsBalance){
+		return (_name, _url, _gameCreator, _rpiContractAddress, _currentMilestoneId, _gemsBalance);
+	}
 	function gemsBalance() public view returns(uint256){
 		return _gemsBalance;
 	}
