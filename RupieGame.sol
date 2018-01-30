@@ -1,256 +1,94 @@
 pragma solidity ^0.4.18;
-import "./EtherealFoundationOwned.sol";
-import "./CommunityTokenVendingMachine.sol";
 
-contract RupieGame is EtherealFoundationOwned{	
-	//enum
-	enum Statuses{ Closed, Open, InReview, Funded, Rejected, Completed, Deferred }
-	
-	//structs	
-	struct Task{		
-		string Name;
-		string Url;
-		address TaskCreator;
-		bytes32 TaskCategory;
-		Statuses TaskStatus;
-	}
-	struct Milestone{
-		string Name;
-		string Url;
-		uint256 TotalFunds;
-		Statuses MilestoneStatus;
-	}
-	struct Feature{
-		string Name;
-		string Url;
-		uint256 TotalFunds;
-		address FeatureCreator;
-		bytes32 FeatureCategory;
-		Statuses FeatureStatus;
-	}
+contract OwnedContract {
+	address private Owner;    
+	function IsOwner(address addr) view public returns(bool)
+	{
+	    return Owner == addr;
+	}	
+	function TransferOwner(address newOwner) public onlyOwner
+	{
+	    Owner = newOwner;
+	}	
+	function OwnedContract() public
+	{
+	    Owner = msg.sender;
+	}	
+	function Terminate() public onlyOwner
+	{
+	    selfdestruct(Owner);
+	}	
+	modifier onlyOwner(){
+        require(msg.sender == Owner);
+        _;
+    }
+}
+
+contract ERC20Basic {
+	function balanceOf(address _owner) public constant returns (uint256 balance);
+	function transfer(address to, uint256 value) public returns (bool);
+}
+
+
+contract RupieGame is OwnedContract{	
 	
 	//Properties
 	string private _name ;
 	string private _url;
 	address private _gameCreator;	
+	address private _rpiContractAddress;
 	
-	Task[] Tasks;
-	Milestone[] Milestones;
-	Feature[] Features;
+	bytes32 private _currentMilestoneId;
+	mapping(bytes32=>bool) private _milestoneComplete;
 	
-	mapping(uint16=>mapping(address=>uint256)) MilestoneFunds;//milestoneIdx => funderAddress => funds
-	mapping(uint16=>mapping(address=>uint256)) FeatureFunds;//featureIdx => funderAddress => funds
-	mapping(uint16=>uint16) AssignedTasks; //taskIdx => milestoneIdx
-	mapping(uint16=>uint16) AssignedFeatures; //featureIdx => milestoneIdx
+	uint256 private _gemsBalance;
 	
-	uint16 private _currentMilestoneIndex;
-	address private _vendingMachineContractAddress;
+	//EVENTS
+	event Funded(uint256 funds, bytes32 fundId);
+	event Defunded(uint256 fundsRemoved, bytes32 defundId);
+	event Paid(uint256 gemsSpent, uint256 erc20Paid, bytes32 payId);
 	
-	//constructor	
-	function RupieGame (string name, string url, address creator, address vendingMachineContractAddress ) public{
-			//start game with link to pitch
-			_name = name;
-			_url = url;
-			_gameCreator = creator;
-			_vendingMachineContractAddress = vendingMachineContractAddress;
-	}
-	
-	//EVENTES
-	event MilestoneCreated(string title, uint16 indexed milestoneIdx);
-	event MilestoneStatusChanged(uint16 indexed milestoneIdx, Statuses newMilestoneStatus);
-	
-	event FeatureCreated(uint16 indexed featureIdx);
-	event FeatureStatusChanged(uint16 indexed featureIdx, Statuses newFeatureStatus);
-	
-	event TaskCreated(uint16 taskIdx, string url);
-	event TaskAttachedToMilestone(uint16 taskIdx, uint16 milestoneIdx);
-	event TaskAttachedToFeature(uint16 taskIdx, uint16 featureIdx);
-	event TaskStatusChanged(uint16 indexed taskIdx, Statuses newTaskStatus);
-	
-	event NameUpdated(string name);
-	event UrlUpdated(string url);
-	event CreatorTransfered(address newCreator);
-	
-	event FeatureFunded(address funder, uint16 featureIdx, uint256 communityTokenAmt);
-	event MilestoneFunded(address funder, uint16 milestoneIdx, uint256 communityTokenAmt);
-	
-	event FeatureRefunded(address  funder, uint16 featureIdx, uint256 communityTokenAmt);
-	event MilestoneRefunded(address  funder, uint16 milestoneIdx, uint256 communityTokenAmt);
-	
-	//VIEWS
-	function GetName() public view returns(string){
-	    return _name;
-	
-	}
-	function GetUrl() public view returns(string){
-	    return _url;
-	
-	}
-	function GetTokenVendingMachineAddress() public view returns(address){
-	    return _vendingMachineContractAddress;
-	
-	}
-	function GetGameCreator() public view returns(address){
-	    return _gameCreator;
-	}
-
-	function GetMilestoneContribution(uint16 milestoneIndex, address funder) public view returns(uint256){
-	    return MilestoneFunds[milestoneIndex][funder];
-	
-	}
-	function GetFunctionContribution(uint16 featureIndex, address funder) public view returns (uint256){
-	    return FeatureFunds[featureIndex][funder];
-	}
-	function GetMilestoneByNumber(uint16 milestoneIndex) public view returns(string Name, string Url,  uint256 TotalFunds, Statuses MilestoneStatus) {
-    	 return MilestoneToView(Milestones[milestoneIndex]);
-	}
-	
-	function GetTaskByNumber(uint16 taskIndex) public view returns(string Name, string Url,  address TaskCreator, uint16 AttachedToMilestone, Statuses TaskStatus){
-	    return TaskToView(Tasks[taskIndex], taskIndex);
-	}
-	
-	
-	function GetFeatureByNumber(uint16 featureIndex) public view returns(string Name, string Url,  uint256 TotalFunds, address FeatureCreator, uint16 AttachedToMilestone, Statuses FeatureStatus){
-	    return FeatureToView(Features[featureIndex], featureIndex);
-	}
-	/////////////////////////////////////
-	
-	//HELPERS
-	function MilestoneToView(Milestone milestone) internal pure returns(string Name, string Url,  uint256 TotalFunds, Statuses MilestoneStatus){
-	    return (milestone.Name, milestone.Url, milestone.TotalFunds,milestone.MilestoneStatus);
-	
-	}
-	
-	function TaskToView(Task task, uint16 taskIdx) internal view returns(string Name, string Url,  address TaskCreator, uint16 AttachedToMilestone, Statuses TaskStatus){
-	    return (task.Name, task.Url, task.TaskCreator, AssignedTasks[taskIdx], task.TaskStatus);
-	}
-	
-	function FeatureToView(Feature feature, uint16 featureIdx) internal view returns(string Name, string Url, uint256 TotalFunds, address FeatureCreator, uint16 AttachedToMilestone, Statuses FeatureStatus){
-	    return (feature.Name, feature.Url,  feature.TotalFunds, feature.FeatureCreator, AssignedFeatures[featureIdx], feature.FeatureStatus);
-	}
-	//////////
-	
-	//OWNER METHODS
-	function UpdateName(string name) public onlyOwner {
+	function RupieGame(string name, string url, address gameCreator, address rpiContractAddress, bytes32 initialMilestoneId) public{
 		_name = name;
-		NameUpdated(name);
-		
-	}
-	function UpdateUrl(string url) public onlyOwner { 
 		_url = url;
-		UrlUpdated(url);
-	}	
-	function UpdateCommunityTokenAddress(address vendingMachineAddress) public onlyOwner{
-	    _vendingMachineContractAddress = vendingMachineAddress;
-	    
-	}
-	function TransferCreator(address newCreator) public onlyOwner {
-		_gameCreator = newCreator;
-		CreatorTransfered(newCreator);
-	}
-	function CreateMilestone(string title, string url) public onlyOwner{
-	    
-		Milestones.push(Milestone(title, url,0, Statuses.Closed));
-		
-		MilestoneCreated(title, uint16(Milestones.length-1));
+		_gameCreator = gameCreator;
+		_rpiContractAddress = rpiContractAddress;
+		_currentMilestoneId = initialMilestoneId;
 	}
 	
-	function SetMilestoneStatus(uint16 milestoneIndex, Statuses newMilestoneStatus) public onlyOwner{
-		Milestones[milestoneIndex].MilestoneStatus = newMilestoneStatus;
-		if(newMilestoneStatus == Statuses.Funded){
-	    	CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, _gameCreator, Milestones[milestoneIndex].TotalFunds);
+	function about() public view returns(
+	string name, string url, address gameCreator, address rpiContractAddress, bytes32 currentMilestoneId, uint256 gemsBalance){
+		return (_name, _url, _gameCreator, _rpiContractAddress, _currentMilestoneId, _gemsBalance);
+	}
+	function gemsBalance() public view returns(uint256){
+		return _gemsBalance;
+	}
+	
+	function fund(uint256 newFunds, bytes32 fundId) public onlyOwner{
+		require(newFunds + _gemsBalance > _gemsBalance);//overflow check
+		_gemsBalance += newFunds;	
+		Funded(newFunds, fundId);	
+	}
+	
+	function defund(uint256 fundsToRemove, bytes32 defundId) public onlyOwner{
+		require(_gemsBalance - fundsToRemove >= 0);
+		_gemsBalance -= fundsToRemove;	
+		Defunded(fundsToRemove, defundId);	
+	}
+	
+	function payout(uint256 erc20ToSend, uint256 gemsToSpend, bytes32 nextMilestone, bytes32 payId) public onlyOwner{
+		require(_gemsBalance >= gemsToSpend);
+		
+		_milestoneComplete[_currentMilestoneId] = true;
+		_currentMilestoneId = nextMilestone;
+		_gemsBalance -= gemsToSpend;
+		
+		if(erc20ToSend > 0){
+			ERC20Basic erc20 = ERC20Basic(_rpiContractAddress);
+			require(erc20.transfer(_gameCreator, erc20ToSend));
 		}
-		MilestoneStatusChanged(milestoneIndex, newMilestoneStatus);
-	}
-	
-	function SetTaskStatus(uint16 taskIndex, Statuses newTaskStatus) public onlyOwner{
-		Tasks[taskIndex].TaskStatus = newTaskStatus;
-		TaskStatusChanged(taskIndex, newTaskStatus);
-	}
-	
-	function AttachTaskToMilestone(uint16 taskIndex, uint16 milestoneIndex) public onlyOwner {
-		AssignedTasks[taskIndex] = milestoneIndex;
-	}	
-	
-	function SetCurrentMilestone(uint16 milestoneIndex) public onlyOwner{
-		_currentMilestoneIndex = milestoneIndex;
-	}
-	
-	function SetFeatureStatus(uint16 featureNumber, Statuses newFeatureStatus) public onlyOwner{
-		Features[featureNumber-1].FeatureStatus = newFeatureStatus;
-		if(newFeatureStatus == Statuses.Funded){
-	    	CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, _gameCreator, Features[featureNumber-1].TotalFunds);
-		}
-		FeatureStatusChanged(featureNumber-1, newFeatureStatus);
-	}
-	function AttachFeatureToMilestone(uint16 featureIndex, uint16 milestoneIndex) public onlyOwner{
-		AssignedFeatures[featureIndex] = milestoneIndex;
-	}	
-	///////////////////////////
-	
-	/////COMMUNITY METHODS/////
-	function CreateTask(string name, string url, address creator) public onlyOwner{
 		
-		Tasks.push(Task(name, url, creator,0,Statuses.Closed));
-		TaskCreated(uint16(Tasks.length-1), url);
-	}
-	function CreateFeature(string name, string url, bytes32 featureCategory, address creator) public onlyOwner{
-		
-		//TODO, charge for this
-		Features.push(Feature(name, url, 0, creator, featureCategory, Statuses.Closed));
-		FeatureCreated(uint16(Features.length-1));
-	}
-	
-	function FundMilestone(uint16 milestoneIndex, uint256 communityTokenAmt, address funder) public onlyOwner{
-	    require(Milestones[milestoneIndex].MilestoneStatus == Statuses.Open);
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(funder, this, communityTokenAmt);
-		
-		//if it gets here, it was OK
-		MilestoneFunds[milestoneIndex][funder] +=  communityTokenAmt;
-		Milestones[milestoneIndex].TotalFunds += communityTokenAmt;
-		MilestoneFunded(funder, milestoneIndex, communityTokenAmt);
-	}
-	function FundFeature(uint16 featureIndex, uint256 communityTokenAmt, address funder) public onlyOwner{
-	    require(Features[featureIndex].FeatureStatus == Statuses.Open);
-	    
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(funder, this, communityTokenAmt);
-		
-		//if it gets here, we are good
-		FeatureFunds[featureIndex][funder] +=  communityTokenAmt;
-		Features[featureIndex].TotalFunds += communityTokenAmt;
-		
-		FeatureFunded(funder, featureIndex, communityTokenAmt);
-	}
-	function RemoveFundsFromMilestone(uint16 milestoneIndex, address funder) public onlyOwner{
-		//must be rejected and have a balance
-		require(Milestones[milestoneIndex].MilestoneStatus == Statuses.Rejected && MilestoneFunds[milestoneIndex][funder] > 0);
-		
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, funder, MilestoneFunds[milestoneIndex][funder]);
-		Milestones[milestoneIndex].TotalFunds -= MilestoneFunds[milestoneIndex][funder];
-		
-		MilestoneRefunded(funder, milestoneIndex, MilestoneFunds[milestoneIndex][funder]);
-		MilestoneFunds[milestoneIndex][funder] = 0;
-		
-		
-	}
-	function RemoveFundsFromFeature(uint16 featureIndex, address funder)public  onlyOwner{
-		//must be rejected
-		require(Features[featureIndex].FeatureStatus == Statuses.Rejected && FeatureFunds[featureIndex][funder] > 0);
-		uint256 toRefund = FeatureFunds[featureIndex][funder];
-	
-		CommunityTokenVendingMachine(_vendingMachineContractAddress).Transfer(this, funder, toRefund);
-		Features[featureIndex].TotalFunds -=  toRefund;
-		FeatureRefunded(funder, featureIndex,  toRefund);
-		FeatureFunds[featureIndex][funder] = 0;
-	}	
-	///////////////////////////
-	
-	
-	//fallback
-    event RecievedEth(address indexed _from, uint256 _value);
-	function () payable public {
-		//these funds will automatically be assigned to the current milestone
-		RecievedEth(msg.sender, msg.value);
+		Paid(gemsToSpend, erc20ToSend, payId);
 	}
 	
 	
